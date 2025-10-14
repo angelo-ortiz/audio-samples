@@ -23,8 +23,8 @@
                     <tr>
                         <th>Audio Sample</th>
                         <th>Transcription</th>
-                        <th>WER</th>
                         <th>CER</th>
+                        <th>WER</th>
                         <th>MCD</th>
                     </tr>
                 </thead>
@@ -48,7 +48,7 @@
                             {{ language['mcd'][i] }}
                         </td>
                     </tr>
-                    <tr>
+                    <tr class="double-line">
                         <!-- Synthesised Row -->
                         <td>
                             <audio controls src="{{ language['synthesised_audio'][i] }}"></audio>

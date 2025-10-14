@@ -39,3 +39,6 @@ th, td {
 section {
     margin-bottom: 3em;
 }
+.double-line td {
+  border-bottom: 3px double #000;
+}

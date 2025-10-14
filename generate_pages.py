@@ -36,10 +36,10 @@ from pydub import AudioSegment
 
 # Configuration
 SPLIT = 'test'
+OUTPUT_DIR = Path('.')
 SRC_DATA_DIR = ALIGNMENTS_ROOT.parent / 'resynthesis'
-DST_DATA_DIR = Path(__file__).parent / 'data'
-TEMPLATE_DIR = Path(__file__).parent / 'templates'
-OUTPUT_DIR = Path(__file__).parent / 'pages'
+DST_DATA_DIR = Path('data')
+TEMPLATE_DIR = Path('templates')
 MENU_PAGES = [
     {'src_name': 'pre_trained_sparc/multi', 'dst_name': 'sparc_multi', 'title': 'SPARC-multi', 'filename': 'sparc_multi.html'},
     {'src_name': 'pre_trained_sparc/en+', 'dst_name': 'sparc_en_plus', 'title': 'SPARC-en+', 'filename': 'sparc_en_plus.html'},
@@ -67,7 +67,7 @@ def get_language_data(src_page: str, dst_page: str, lang: str):
     gt_trans = load_transcription_wer_cer(ALIGNMENTS_ROOT / SPLIT / 'omni_transcriptions' / f'{lang}.csv')
     syn_trans = load_transcription_wer_cer(SRC_DATA_DIR / src_page / SPLIT / 'omni_transcriptions' / f'{lang}.csv')
 
-    syn_trans_items = sorted(syn_trans.items(), key=lambda x: x[1][-1], reverse=True)  # Sort by WER descending
+    syn_trans_items = sorted(syn_trans.items(), key=lambda x: x[1][-1])
     selected_stems = [item[0] for item in syn_trans_items[:MAX_ROWS_PER_LANGUAGE_BEST]]
     selected_stems += [item[0] for item in syn_trans_items[-MAX_ROWS_PER_LANGUAGE_BEST:]]
 
@@ -97,8 +97,8 @@ def get_language_data(src_page: str, dst_page: str, lang: str):
     return {
         'name': lang,
         'num_samples': len(selected_stems),
-        'ground_truth_audio': [f.relative_to(OUTPUT_DIR.parent) for f in gt_audio_paths],
-        'synthesised_audio': [f.relative_to(OUTPUT_DIR.parent) for f in syn_audio_paths],
+        'ground_truth_audio': [f.relative_to(OUTPUT_DIR) for f in gt_audio_paths],
+        'synthesised_audio': [f.relative_to(OUTPUT_DIR) for f in syn_audio_paths],
         'ground_truth_transcriptions': [gt_trans[stem][0] for stem in selected_stems],
         'synthesised_transcriptions': [syn_trans[stem][0] for stem in selected_stems],
         'cer_ground_truth': [gt_trans[stem][1] for stem in selected_stems],
@@ -117,7 +117,7 @@ def main():
         if not model_dir.exists():
             print(f"Warning: Data directory ({model_dir}) for {page['src_name']} does not exist. Skipping.")
             continue
-        languages = [d for d in (model_dir / 'audios').iterdir() if d.is_dir()]
+        languages = sorted([d for d in (model_dir / 'audios').iterdir() if d.is_dir()])
         lang_data = [get_language_data(page['src_name'], page['dst_name'], lang.name) for lang in languages]
         output_html = template.render(
             page_title=page['title'],
@@ -127,7 +127,6 @@ def main():
         output_path = OUTPUT_DIR / page['filename']
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(output_html)
-    # Optionally, generate index.html as a redirect or landing page
 
 if __name__ == '__main__':
     main()
