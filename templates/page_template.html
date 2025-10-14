@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ page_title }}</title>
+    <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+    <nav>
+        <ul class="menu-bar">
+            {% for page in menu_pages %}
+            <li><a href="../{{ page['filename'] }}">{{ page['name'] }}</a></li>
+            {% endfor %}
+        </ul>
+    </nav>
+    <main>
+        <h1>{{ page_title }}</h1>
+        {% for language in languages %}
+        <section>
+            <h2>{{ language['name'] }}</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Audio Sample</th>
+                        <th>Transcription</th>
+                        <th>WER</th>
+                        <th>CER</th>
+                        <th>MCD</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for i in range(language['num_samples']) %}
+                    <tr>
+                        <!-- Ground Truth Row -->
+                        <td>
+                            <audio controls src="{{ language['ground_truth_audio'][i] }}"></audio>
+                        </td>
+                        <td>
+                            {{ language['ground_truth_transcriptions'][i] }}
+                        </td>
+                        <td>
+                            {{ language['cer_ground_truth'][i] }}
+                        </td>
+                        <td>
+                            {{ language['wer_ground_truth'][i] }}
+                        </td>
+                        <td rowspan="2" style="vertical-align: middle; text-align: center;">
+                            {{ language['mcd'][i] }}
+                        </td>
+                    </tr>
+                    <tr>
+                        <!-- Synthesised Row -->
+                        <td>
+                            <audio controls src="{{ language['synthesised_audio'][i] }}"></audio>
+                        </td>
+                        <td>
+                            {{ language['synthesised_transcriptions'][i] }}
+                        </td>
+                        <td>
+                            {{ language['cer_synthesised'][i] }}
+                        </td>
+                        <td>
+                            {{ language['wer_synthesised'][i] }}
+                        </td>
+                        <!-- MCD cell is spanned above -->
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+        {% endfor %}
+    </main>
+</body>
+</html>

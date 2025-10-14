@@ -1,0 +1,13 @@
+[project]
+name = "audio-samples"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "babblerl",
+    "jinja2>=3.1.6",
+]
+
+[tool.uv.sources]
+babblerl = { path = "../babblerl", editable = true }

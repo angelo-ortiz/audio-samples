@@ -1,0 +1,6 @@
+.envrc
+*.code-workspace
+*.egg-info
+__pycache__
+/.vscode
+uv.lock
