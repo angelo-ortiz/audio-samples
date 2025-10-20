@@ -14,17 +14,29 @@
         </ul>
     </nav>
     <main>
+        <a id="top"></a>
         <h1>{{ page_title }}</h1>
+        <!-- Language Bar -->
+        <div class="language-bar">
+            {% for language in languages %}
+                <a href="#lang-{{ language['name'] }}">{{ language['name'] }}</a>
+            {% endfor %}
+        </div>
         {% for language in languages %}
         <section>
-            <h2>{{ language['name'] }}</h2>
+            <a id="lang-{{ language['name'] }}"></a>
+            <h2>
+                {{ language['name'] }}
+                <a href="#top" class="go-top-btn" title="Go to top">&#8679; Top</a>
+            </h2>
             <table>
                 <thead>
                     <tr>
                         <th>Audio Sample</th>
                         <th>Transcription</th>
-                        <th>CER</th>
-                        <th>WER</th>
+                        <th>CER (in %)</th>
+                        <th>WER (in %)</th>
+                        <th>F0 RMSE (Hz)</th>
                         <th>MCD</th>
                     </tr>
                 </thead>
@@ -36,7 +48,8 @@
                             <audio controls src="{{ language['ground_truth_audio'][i] }}"></audio>
                         </td>
                         <td>
-                            {{ language['ground_truth_transcriptions'][i] }}
+                            <b>Original:</b> {{ language['original_transcriptions'][i] }}<br>
+                            <b>omniASR on GT:</b> {{ language['ground_truth_transcriptions'][i] }}
                         </td>
                         <td>
                             {{ language['cer_ground_truth'][i] }}
@@ -45,16 +58,19 @@
                             {{ language['wer_ground_truth'][i] }}
                         </td>
                         <td rowspan="2" style="vertical-align: middle; text-align: center;">
+                            {{ language['f0'][i] }}
+                        </td>
+                        <td rowspan="2" style="vertical-align: middle; text-align: center;">
                             {{ language['mcd'][i] }}
                         </td>
                     </tr>
-                    <tr class="double-line">
+                    <tr>
                         <!-- Synthesised Row -->
                         <td>
                             <audio controls src="{{ language['synthesised_audio'][i] }}"></audio>
                         </td>
                         <td>
-                            {{ language['synthesised_transcriptions'][i] }}
+                           <b>omniASR on synthesis:</b> {{ language['synthesised_transcriptions'][i] }}
                         </td>
                         <td>
                             {{ language['cer_synthesised'][i] }}

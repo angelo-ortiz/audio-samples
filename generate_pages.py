@@ -1,41 +1,15 @@
-# audio-samples/
-# ├── index.html
-# ├── templates/
-# │   └── page_template.html
-# ├── data/
-# │   ├── Pre-trained_SPARC-multi/
-# │   │   ├── en/
-# │   │   │   ├── ground_truth/
-# │   │   │   │   ├── sample1.mp3
-# │   │   │   │   ├── sample2.mp3
-# │   │   │   │   └── ...
-# │   │   │   ├── synthesised/
-# │   │   │   │   ├── sample1.mp3
-# │   │   │   │   ├── sample2.mp3
-# │   │   │   │   └── ...
-# │   │   │   ├── ground_truth_transcriptions.txt
-# │   │   │   ├── synthesised_transcriptions.txt
-# │   │   │   ├── metrics.json
-# │   │   │   └── ...
-# │   │   └── [other languages]/
-# │   ├── Pre-trained_SPARC-en+/
-# │   │   └── [languages as above]/
-# │   ├── Trained_HiFi-GAN/
-# │   │   └── [languages as above]/
-# ├── assets/
-# │   └── style.css
-# └── generate_pages.py
-
-
 import csv
 from pathlib import Path
-from jinja2 import Environment, FileSystemLoader
+
 from babblerl.io import read_manifest
-from babblerl.constants import ALIGNMENTS_ROOT
+from babblerl.constants import ALIGNMENTS_ROOT, AUDIO_ROOT
+from babblerl.utils import get_all_transcriptions
+from jinja2 import Environment, FileSystemLoader
 from pydub import AudioSegment
 
 # Configuration
 SPLIT = 'test'
+TRANSCRIPTION_DIR = 'omni_transcriptions_wo_f0'
 OUTPUT_DIR = Path('.')
 SRC_DATA_DIR = ALIGNMENTS_ROOT.parent / 'resynthesis'
 DST_DATA_DIR = Path('data')
@@ -47,29 +21,86 @@ MENU_PAGES = [
 ]
 MAX_ROWS_PER_LANGUAGE_BEST = 3 # Limit the number of audio samples displayed per language
 
-def load_transcription_wer_cer(path: Path) -> dict[str, tuple[str, float, float]]:
+
+def remove_text_within_parentheses(text: str) -> str:
+    """Removes the trailing text within parentheses from the input string.
+
+    Args:
+        text: The input string.
+
+    Returns:
+        The input string with the text within parentheses removed.
+    """
+    if (beg := text.find('(')) != -1 and text.find(')') > beg:
+        return text[:beg].strip()
+    else:
+        return text
+
+
+def load_transcription_and_metrics(path: Path) -> dict[str, dict[str, str | float]]:
+    """Loads transcription and metrics from a CSV file.
+
+    Args:
+        path: The path to the CSV file.
+
+    Returns:
+        A dictionary mapping file names to their transcription and metric data.
+    """
     with open(path, 'r', newline='') as fp:
         reader = csv.reader(fp, delimiter=',')
         header = next(reader)
-        assert header == ['file', 'transcription', 'cer', 'wer'], f"Unexpected header in {path}: {header}"
-        mapping = {}
+        field2idx = {metric: i for i, metric in enumerate(header)}
+        mapping: dict[str, dict[str, str | float]] = {}
         for row in reader:
-            stem, transcription, cer, wer = row
-            mapping[stem] = (transcription, float(cer), float(wer))
+            mapping[row[field2idx['file']]] = {
+                field: row[idx] if field == 'transcription' else float(row[idx]) for field, idx in field2idx.items() if field != 'file'
+            }
     return mapping
 
-def get_language_data(src_page: str, dst_page: str, lang: str):
+def format_float_str(value: float | str, precision: int = 2, to_percent: bool = False) -> str:
+    """Formats a float value as a string with specified precision.
+    
+    Args:
+        value: The float value to format.
+        precision: The number of decimal places.
+        to_percent: Whether to convert the value to a percentage.
+    """
+    if isinstance(value, str):
+        return value
+    if to_percent:
+        value *= 100
+    return f"{value:.{precision}f}"
+
+def get_language_data(src_page: str, dst_page: str, lang: str) -> dict[str, str | int | list[str]] | None:
+    """Generates data for a specific language to be used in the HTML page.
+
+    Args:
+        src_page: The source page name.
+        dst_page: The destination page name.
+        lang: The language code.
+
+    Returns:
+        A dictionary containing language data for the HTML page.
+    """
     # Read the manifest to get audio file paths
     manifest_path = ALIGNMENTS_ROOT / SPLIT / 'manifests' / f'{lang}.tsv'
     manifest: dict[str, tuple[Path, int]] = read_manifest(manifest_path)
 
     # Read the transcriptions and metrics
-    gt_trans = load_transcription_wer_cer(ALIGNMENTS_ROOT / SPLIT / 'omni_transcriptions' / f'{lang}.csv')
-    syn_trans = load_transcription_wer_cer(SRC_DATA_DIR / src_page / SPLIT / 'omni_transcriptions' / f'{lang}.csv')
+    if not (SRC_DATA_DIR / src_page / SPLIT / TRANSCRIPTION_DIR / f'{lang}.csv').exists():
+        return None  # Skip languages without synthesised transcriptions
 
-    syn_trans_items = sorted(syn_trans.items(), key=lambda x: x[1][-1])
+    gt_trans = load_transcription_and_metrics(ALIGNMENTS_ROOT / SPLIT / TRANSCRIPTION_DIR / f'{lang}.csv', include_mcd=False)
+    syn_trans = load_transcription_and_metrics(SRC_DATA_DIR / src_page / SPLIT / TRANSCRIPTION_DIR / f'{lang}.csv', include_mcd=True)
+
+    syn_trans_items = sorted(syn_trans.items(), key=lambda x: x[1].get('wer', 0))  # Sort by WER
     selected_stems = [item[0] for item in syn_trans_items[:MAX_ROWS_PER_LANGUAGE_BEST]]
     selected_stems += [item[0] for item in syn_trans_items[-MAX_ROWS_PER_LANGUAGE_BEST:]]
+
+    # Read the original transcriptions
+    orig_transcriptions: dict[str, str] = get_all_transcriptions(AUDIO_ROOT / lang, return_header=False)  # type: ignore
+    if lang == 'nan-tw':
+        orig_transcriptions = {stem: remove_text_within_parentheses(trans) for stem, trans in orig_transcriptions.items()}
 
     src_syn_audios_dir = SRC_DATA_DIR / src_page / SPLIT / 'audios' / lang
     dst_gt_audios_dir = DST_DATA_DIR / dst_page / lang / 'ground_truth'
@@ -86,29 +117,24 @@ def get_language_data(src_page: str, dst_page: str, lang: str):
         syn_audio_paths.append(dst_syn_audios_dir / f'{stem}.mp3')
         AudioSegment.from_wav(src_syn_audios_dir / f'{stem}.wav').export(syn_audio_paths[-1], format='mp3')
 
-        # # Write transcriptions to text files
-        # for trans, output in zip([gt_trans, syn_trans], ['ground_truth_transcriptions.txt', 'synthesised_transcriptions.txt']):
-        #     lines = []
-        #     for stem in selected_stems:
-        #         lines.append(trans[stem][0])
-        #     with open(DST_DATA_DIR / dst_page / lang / output, 'w') as f:
-        #         f.write('\n'.join(lines) + '\n')
-
     return {
         'name': lang,
         'num_samples': len(selected_stems),
         'ground_truth_audio': [f.relative_to(OUTPUT_DIR) for f in gt_audio_paths],
         'synthesised_audio': [f.relative_to(OUTPUT_DIR) for f in syn_audio_paths],
-        'ground_truth_transcriptions': [gt_trans[stem][0] for stem in selected_stems],
-        'synthesised_transcriptions': [syn_trans[stem][0] for stem in selected_stems],
-        'cer_ground_truth': [gt_trans[stem][1] for stem in selected_stems],
-        'cer_synthesised': [syn_trans[stem][1] for stem in selected_stems],
-        'wer_ground_truth': [gt_trans[stem][2] for stem in selected_stems],
-        'wer_synthesised': [syn_trans[stem][2] for stem in selected_stems],
-        'mcd': ['N/A' for _ in selected_stems],  # Placeholder, replace with actual MCD if available
+        'original_transcriptions': [orig_transcriptions[stem] for stem in selected_stems],
+        'ground_truth_transcriptions': [gt_trans[stem].get('transcription', '') for stem in selected_stems],
+        'synthesised_transcriptions': [syn_trans[stem].get('transcription', '') for stem in selected_stems],
+        'cer_ground_truth': [format_float_str(gt_trans[stem].get('cer', ''), to_percent=True) for stem in selected_stems],
+        'cer_synthesised': [format_float_str(syn_trans[stem].get('cer', ''), to_percent=True) for stem in selected_stems],
+        'wer_ground_truth': [format_float_str(gt_trans[stem].get('wer', ''), to_percent=True) for stem in selected_stems],
+        'wer_synthesised': [format_float_str(syn_trans[stem].get('wer', ''), to_percent=True) for stem in selected_stems],
+        'mcd': [format_float_str(syn_trans[stem].get('mcd', ''), to_percent=False) for stem in selected_stems],
+        'f0': [format_float_str(syn_trans[stem].get('f0', ''), to_percent=False) for stem in selected_stems],
     }
 
 def main():
+    """Main function to generate HTML pages for audio samples."""
     env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
     template = env.get_template('page_template.html')
 
@@ -119,6 +145,7 @@ def main():
             continue
         languages = sorted([d for d in (model_dir / 'audios').iterdir() if d.is_dir()])
         lang_data = [get_language_data(page['src_name'], page['dst_name'], lang.name) for lang in languages]
+        lang_data = [data for data in lang_data if data is not None]  # Filter out None values
         output_html = template.render(
             page_title=page['title'],
             menu_pages=MENU_PAGES,
