@@ -9,7 +9,7 @@
     <nav>
         <ul class="menu-bar">
             {% for page in menu_pages %}
-            <li><a href="../{{ page['filename'] }}">{{ page['name'] }}</a></li>
+            <li><a href="{{ page['filename'] }}">{{ page['name'] }}</a></li>
             {% endfor %}
         </ul>
     </nav>
