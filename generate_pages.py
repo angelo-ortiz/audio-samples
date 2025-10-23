@@ -1,15 +1,16 @@
-import csv
 from pathlib import Path
 
 from babblerl.io import read_manifest
 from babblerl.constants import ALIGNMENTS_ROOT, AUDIO_ROOT
-from babblerl.utils import get_all_transcriptions
+from babblerl.utils import get_all_transcriptions, read_transcription_and_metrics
 from jinja2 import Environment, FileSystemLoader
 from pydub import AudioSegment
 
 # Configuration
 SPLIT = 'test'
-TRANSCRIPTION_DIR = 'omni_transcriptions_wo_f0'
+TRANSCRIPTION_DIR = 'omniASR_LLM_1B_transcriptions'
+CTC_TRANSCRIPTION_DIR = 'omniASR_CTC_3B_transcriptions'
+ACOUSTIC_DIR = 'acoustic_transcriptions'
 OUTPUT_DIR = Path('.')
 SRC_DATA_DIR = ALIGNMENTS_ROOT.parent / 'resynthesis'
 DST_DATA_DIR = Path('data')
@@ -36,26 +37,6 @@ def remove_text_within_parentheses(text: str) -> str:
     else:
         return text
 
-
-def load_transcription_and_metrics(path: Path) -> dict[str, dict[str, str | float]]:
-    """Loads transcription and metrics from a CSV file.
-
-    Args:
-        path: The path to the CSV file.
-
-    Returns:
-        A dictionary mapping file names to their transcription and metric data.
-    """
-    with open(path, 'r', newline='') as fp:
-        reader = csv.reader(fp, delimiter=',')
-        header = next(reader)
-        field2idx = {metric: i for i, metric in enumerate(header)}
-        mapping: dict[str, dict[str, str | float]] = {}
-        for row in reader:
-            mapping[row[field2idx['file']]] = {
-                field: row[idx] if field == 'transcription' else float(row[idx]) for field, idx in field2idx.items() if field != 'file'
-            }
-    return mapping
 
 def format_float_str(value: float | str, precision: int = 2, to_percent: bool = False) -> str:
     """Formats a float value as a string with specified precision.
@@ -90,8 +71,11 @@ def get_language_data(src_page: str, dst_page: str, lang: str) -> dict[str, str 
     if not (SRC_DATA_DIR / src_page / SPLIT / TRANSCRIPTION_DIR / f'{lang}.csv').exists():
         return None  # Skip languages without synthesised transcriptions
 
-    gt_trans = load_transcription_and_metrics(ALIGNMENTS_ROOT / SPLIT / TRANSCRIPTION_DIR / f'{lang}.csv', include_mcd=False)
-    syn_trans = load_transcription_and_metrics(SRC_DATA_DIR / src_page / SPLIT / TRANSCRIPTION_DIR / f'{lang}.csv', include_mcd=True)
+    gt_trans = read_transcription_and_metrics(ALIGNMENTS_ROOT / SPLIT / TRANSCRIPTION_DIR / f'{lang}.csv')
+    syn_trans = read_transcription_and_metrics(SRC_DATA_DIR / src_page / SPLIT / TRANSCRIPTION_DIR / f'{lang}.csv') # TODO: adapt here with another for acoustic metrics
+
+    gt_ctc_trans = read_transcription_and_metrics(ALIGNMENTS_ROOT / SPLIT / CTC_TRANSCRIPTION_DIR / f'{lang}.csv')
+    syn_ctc_trans = read_transcription_and_metrics(SRC_DATA_DIR / src_page / SPLIT / CTC_TRANSCRIPTION_DIR / f'{lang}.csv')
 
     syn_trans_items = sorted(syn_trans.items(), key=lambda x: x[1].get('wer', 0))  # Sort by WER
     selected_stems = [item[0] for item in syn_trans_items[:MAX_ROWS_PER_LANGUAGE_BEST]]
@@ -123,12 +107,12 @@ def get_language_data(src_page: str, dst_page: str, lang: str) -> dict[str, str 
         'ground_truth_audio': [f.relative_to(OUTPUT_DIR) for f in gt_audio_paths],
         'synthesised_audio': [f.relative_to(OUTPUT_DIR) for f in syn_audio_paths],
         'original_transcriptions': [orig_transcriptions[stem] for stem in selected_stems],
-        'ground_truth_transcriptions': [gt_trans[stem].get('transcription', '') for stem in selected_stems],
-        'synthesised_transcriptions': [syn_trans[stem].get('transcription', '') for stem in selected_stems],
-        'cer_ground_truth': [format_float_str(gt_trans[stem].get('cer', ''), to_percent=True) for stem in selected_stems],
-        'cer_synthesised': [format_float_str(syn_trans[stem].get('cer', ''), to_percent=True) for stem in selected_stems],
-        'wer_ground_truth': [format_float_str(gt_trans[stem].get('wer', ''), to_percent=True) for stem in selected_stems],
-        'wer_synthesised': [format_float_str(syn_trans[stem].get('wer', ''), to_percent=True) for stem in selected_stems],
+        'ground_truth_transcriptions': [[trans[stem].get('transcription', '') for stem in selected_stems] for trans in [gt_trans, gt_ctc_trans]],
+        'synthesised_transcriptions': [[trans[stem].get('transcription', '') for stem in selected_stems] for trans in [syn_trans, syn_ctc_trans]],
+        'cer_ground_truth': [[format_float_str(trans[stem].get('cer', ''), to_percent=True) for stem in selected_stems] for trans in [gt_trans, gt_ctc_trans]],
+        'cer_synthesised': [[format_float_str(trans[stem].get('cer', ''), to_percent=True) for stem in selected_stems] for trans in [syn_trans, syn_ctc_trans]],
+        'wer_ground_truth': [[format_float_str(trans[stem].get('wer', ''), to_percent=True) for stem in selected_stems] for trans in [gt_trans, gt_ctc_trans]],
+        'wer_synthesised': [[format_float_str(trans[stem].get('wer', ''), to_percent=True) for stem in selected_stems] for trans in [syn_trans, syn_ctc_trans]],
         'mcd': [format_float_str(syn_trans[stem].get('mcd', ''), to_percent=False) for stem in selected_stems],
         'f0': [format_float_str(syn_trans[stem].get('f0', ''), to_percent=False) for stem in selected_stems],
     }

@@ -49,13 +49,18 @@
                         </td>
                         <td>
                             <b>Original:</b> {{ language['original_transcriptions'][i] }}<br>
-                            <b>omniASR on GT:</b> {{ language['ground_truth_transcriptions'][i] }}
+                            <b>omniASR_LLM_1B on GT:</b> {{ language['ground_truth_transcriptions'][0][i] }}<br>
+                            <b>omniASR_CTC_3B on GT:</b> {{ language['ground_truth_transcriptions'][1][i] }}
                         </td>
                         <td>
-                            {{ language['cer_ground_truth'][i] }}
+                            <br>
+                            {{ language['cer_ground_truth'][0][i] }}<br>
+                            {{ language['cer_ground_truth'][1][i] }}
                         </td>
                         <td>
-                            {{ language['wer_ground_truth'][i] }}
+                            <br>
+                            {{ language['wer_ground_truth'][0][i] }}<br>
+                            {{ language['wer_ground_truth'][1][i] }}
                         </td>
                         <td rowspan="2" style="vertical-align: middle; text-align: center;">
                             {{ language['f0'][i] }}
@@ -70,13 +75,16 @@
                             <audio controls src="{{ language['synthesised_audio'][i] }}"></audio>
                         </td>
                         <td>
-                           <b>omniASR on synthesis:</b> {{ language['synthesised_transcriptions'][i] }}
+                           <b>omniASR_LLM_1B on synthesis:</b> {{ language['synthesised_transcriptions'][0][i] }}<br>
+                           <b>omniASR_CTC_3B on synthesis:</b> {{ language['synthesised_transcriptions'][1][i] }}
                         </td>
                         <td>
-                            {{ language['cer_synthesised'][i] }}
+                            {{ language['cer_synthesised'][0][i] }}<br>
+                            {{ language['cer_synthesised'][1][i] }}
                         </td>
                         <td>
-                            {{ language['wer_synthesised'][i] }}
+                            {{ language['wer_synthesised'][0][i] }}<br>
+                            {{ language['wer_synthesised'][1][i] }}
                         </td>
                         <!-- MCD cell is spanned above -->
                     </tr>
