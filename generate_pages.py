@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from babblerl.io import read_manifest
@@ -6,22 +7,28 @@ from babblerl.metrics import _normalize
 from babblerl.utils import get_all_transcriptions, read_transcription_and_metrics
 from jinja2 import Environment, FileSystemLoader
 from pydub import AudioSegment
+from sympy import N
+from tqdm import tqdm
 
 # Configuration
-SPLIT = 'test'
+SPLIT = 'test-2h_snr-40.0_c50-50.0_pesq-3.0_stoi-0.9' # 'test'
 TRANSCRIPTION_DIR = 'omniASR_LLM_1B_transcriptions'
 CTC_TRANSCRIPTION_DIR = 'omniASR_CTC_3B_transcriptions'
 ACOUSTIC_DIR = 'acoustic_transcriptions'
-OUTPUT_DIR = Path('.')
 SRC_DATA_DIR = ALIGNMENTS_ROOT.parent / 'resynthesis'
-DST_DATA_DIR = Path('data')
-TEMPLATE_DIR = Path('templates')
+ROOT_DIR = Path('.')
+OUTPUT_DIR = ROOT_DIR / 'pages'
+DST_DATA_DIR = ROOT_DIR / 'data'
+TEMPLATE_DIR = ROOT_DIR / 'templates'
 MENU_PAGES = [
     {'src_name': 'pre_trained_sparc/multi', 'dst_name': 'sparc_multi', 'title': 'SPARC-multi', 'filename': 'sparc_multi.html'},
-    # {'src_name': 'pre_trained_sparc/en+', 'dst_name': 'sparc_en_plus', 'title': 'SPARC-en+', 'filename': 'sparc_en_plus.html'},
-    {'src_name': 'hifi_gan/train-50h_snr35_c10_s132k', 'dst_name': 'hifi_gan_132k', 'title': 'HiFi-GAN (132k/500k)', 'filename': 'hifi_gan_132k.html'},
-    {'src_name': 'hifi_gan/train-50h_snr35_c10_s310k', 'dst_name': 'hifi_gan_310k', 'title': 'HiFi-GAN (310k/500k)', 'filename': 'hifi_gan_310k.html'},
-    {'src_name': 'hifi_gan/train-50h_snr35_c10_s500k', 'dst_name': 'hifi_gan_500k', 'title': 'HiFi-GAN (500k/500k)', 'filename': 'hifi_gan_500k.html'},
+    {'src_name': 'encodec/bw_1-5', 'dst_name': 'encodec_cb2', 'title': 'EnCodec-2', 'filename': 'encodec_2.html'},
+    {'src_name': 'encodec/bw_6', 'dst_name': 'encodec_cb8', 'title': 'EnCodec-8', 'filename': 'encodec_8.html'},
+    {'src_name': 'hifi_gan/train-50h_snr-35.0_c50-10.0_old-split_s500k', 'dst_name': 'hifi_gan_500k_snr-35_c50-10', 'title': 'HiFi-GAN 500k (no avg. spk)', 'filename': 'hifi_gan.html'},
+    {'src_name': 'hifi_gan/train-50h_snr-35.0_c50-10.0_old-split_avg-spk', 'dst_name': 'hifi_gan_500k_snr-35_c50-10_avg-spk', 'title': 'HiFi-GAN 500k', 'filename': 'hifi_gan_avg-spk.html'},
+    {'src_name': 'hifi_gan/train-50h_snr-35.0_c50-40.0', 'dst_name': 'hifi_gan_2M_snr-35_c50-40', 'title': 'HiFi-GAN 2M filter+', 'filename': 'hifi_gan_c50-40.html'},
+    {'src_name': 'hifi_gan/train-50h_snr-40.0_c50-50.0_pesq-3.0_stoi-0.9_s500k', 'dst_name': 'hifi_gan_2M_snr-40_c50-50_pesq-3_stoi-0-9', 'title': 'HiFi-GAN 2M filter++', 'filename': 'hifi_gan_filtered.html'},
+    {'src_name': 'hifi_gan/train-50h_snr-40.0_c50-50.0_pesq-3.0_stoi-0.9_float8-e5m2_s100k', 'dst_name': 'hifi_gan_2M_snr-40_c50-50_pesq-3_stoi-0-9_fp8_800k', 'title': 'HiFi-GAN 800k filter++ float8', 'filename': 'hifi_gan_filtered_fp8.html'},
 ]
 MAX_ROWS_PER_LANGUAGE_BEST = 3 # Limit the number of audio samples displayed per language
 
@@ -55,6 +62,7 @@ def format_float_str(value: float | str, precision: int = 2, to_percent: bool = 
     if to_percent:
         value *= 100
     return f"{value:.{precision}f}"
+
 
 def get_language_data(src_page: str, dst_page: str, lang: str, selected_stems: list[str] | None = None):
     """Generates data for a specific language to be used in the HTML page.
@@ -108,18 +116,20 @@ def get_language_data(src_page: str, dst_page: str, lang: str, selected_stems: l
         
         # Convert WAV to MP3 and copy to destination directories
         gt_audio_paths.append(dst_gt_audios_dir / f'{stem}.mp3')
-        _ = AudioSegment.from_wav(manifest[stem][0]).export(gt_audio_paths[-1], format='mp3')
+        if not gt_audio_paths[-1].exists():
+            _ = AudioSegment.from_wav(manifest[stem][0]).export(gt_audio_paths[-1], format='mp3')
         syn_audio_paths.append(dst_syn_audios_dir / f'{stem}.mp3')
-        _ = AudioSegment.from_wav(src_syn_audios_dir / f'{stem}.wav').export(syn_audio_paths[-1], format='mp3')
+        if not syn_audio_paths[-1].exists():
+            _ = AudioSegment.from_wav(src_syn_audios_dir / f'{stem}.wav').export(syn_audio_paths[-1], format='mp3')
 
     return {
         'name': lang,
         'num_samples': len(selected_stems),
-        'ground_truth_audio': [f.relative_to(OUTPUT_DIR) for f in gt_audio_paths],
-        'synthesised_audio': [f.relative_to(OUTPUT_DIR) for f in syn_audio_paths],
+        'ground_truth_audio': [f.relative_to(ROOT_DIR) for f in gt_audio_paths],
+        'synthesised_audio': [f.relative_to(ROOT_DIR) for f in syn_audio_paths],
         'original_transcriptions': [orig_transcriptions[stem] for stem in selected_stems],
-        'ground_truth_transcriptions': [[trans[stem].get('transcription', '?') for stem in selected_stems] for trans in [gt_trans, gt_ctc_trans]],
-        'synthesised_transcriptions': [[trans[stem].get('transcription', '?') for stem in selected_stems] for trans in [syn_trans, syn_ctc_trans]],
+        'ground_truth_transcriptions': [[trans[stem].get('transcription', '<UNKNOWN>') for stem in selected_stems] for trans in [gt_trans, gt_ctc_trans]],
+        'synthesised_transcriptions': [[trans[stem].get('transcription', '<UNKNOWN>') for stem in selected_stems] for trans in [syn_trans, syn_ctc_trans]],
         'cer_ground_truth': [[format_float_str(trans[stem].get('cer', ''), to_percent=True) for stem in selected_stems] for trans in [gt_trans, gt_ctc_trans]],
         'cer_synthesised': [[format_float_str(trans[stem].get('cer', ''), to_percent=True) for stem in selected_stems] for trans in [syn_trans, syn_ctc_trans]],
         'wer_ground_truth': [[format_float_str(trans[stem].get('wer', ''), to_percent=True) for stem in selected_stems] for trans in [gt_trans, gt_ctc_trans]],
@@ -128,13 +138,16 @@ def get_language_data(src_page: str, dst_page: str, lang: str, selected_stems: l
         'f0': [format_float_str(syn_trans[stem].get('f0', ''), to_percent=False) for stem in selected_stems],
     }, selected_stems
 
-def main():
-    """Main function to generate HTML pages for audio samples."""
+
+if __name__ == '__main__':
+    pydub_logger = logging.getLogger("pydub.converter")
+    pydub_logger.setLevel(logging.WARNING)
+
     env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
     template = env.get_template('page_template.html')
 
     lang_selected_stems: dict[str, list[str]] = {}
-    for page in MENU_PAGES:
+    for page in tqdm(MENU_PAGES):
         model_dir = Path(SRC_DATA_DIR) / page['src_name'] / SPLIT
         if not model_dir.exists():
             print(f"Warning: Data directory ({model_dir}) for {page['src_name']} does not exist. Skipping.")
@@ -156,6 +169,3 @@ def main():
         output_path = OUTPUT_DIR / page['filename']
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(output_html)
-
-if __name__ == '__main__':
-    main()

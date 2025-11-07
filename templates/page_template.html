@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>{{ page_title }}</title>
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body>
     <nav>
@@ -45,7 +45,7 @@
                     <tr>
                         <!-- Ground Truth Row -->
                         <td>
-                            <audio controls src="{{ language['ground_truth_audio'][i] }}"></audio>
+                            <audio controls src="../{{ language['ground_truth_audio'][i] }}"></audio>
                         </td>
                         <td>
                             <b>Original:</b> {{ language['original_transcriptions'][i] }}<br>
@@ -72,7 +72,7 @@
                     <tr>
                         <!-- Synthesised Row -->
                         <td>
-                            <audio controls src="{{ language['synthesised_audio'][i] }}"></audio>
+                            <audio controls src="../{{ language['synthesised_audio'][i] }}"></audio>
                         </td>
                         <td>
                            <b>omniASR_LLM_1B on synthesis:</b> {{ language['synthesised_transcriptions'][0][i] }}<br>
